@@ -390,7 +390,7 @@ The installation was not considered complete simply because the installer report
 The following basic checks were also performed:
 
 ```text
-Proxmox boots from SSD              → OK
+Proxmox boots from SSD             → OK
 Management network                 → OK
 Static IP 192.168.178.35           → OK
 Web interface on port 8006         → OK
