@@ -435,9 +435,102 @@ The Proxmox GUI does not replace the Linux storage layer underneath it.
 The physical disk must first be correctly understood and prepared at the operating system level before Proxmox can use the mounted directory as virtualization storage.
 
 ---
+# 7. Persistence Test and Mount-Point Protection
 
+After configuring both filesystems in `/etc/fstab`, the server was rebooted to verify that the storage configuration was actually persistent.
 
-# 7. Why the Backup Disk Is Separate
+After the reboot, the mounts were checked with:
+
+```bash
+findmnt /mnt/pve-data
+findmnt /mnt/pve-backup
+```
+
+Filesystem capacity and type were verified with:
+
+```bash
+df -hT /mnt/pve-data /mnt/pve-backup
+```
+
+Finally, Proxmox storage status was checked with:
+
+```bash
+pvesm status
+```
+
+Both storage resources were automatically mounted after reboot and appeared in Proxmox with an `active` status.
+
+This confirmed the complete startup sequence:
+
+```text
+System boot
+    ↓
+Linux reads /etc/fstab
+    ↓
+pve-data and pve-backup are mounted
+    ↓
+Proxmox detects the mounted storage
+    ↓
+Storage becomes active
+```
+
+## 7.1 Protecting Against Failed Mounts
+
+An additional protection was then configured using the Proxmox `is_mountpoint` option.
+
+The directories:
+
+```text
+/mnt/pve-data
+/mnt/pve-backup
+```
+
+exist on the root filesystem even when the corresponding HDDs are not mounted.
+
+Without an additional check, a failed disk mount could therefore create the risk of data being written into the empty directory on the system disk instead of the intended HDD.
+
+To prevent this, both Proxmox storage definitions were configured to require a real mount point:
+
+```bash
+pvesm set pve-data --is_mountpoint 1
+pvesm set pve-backup --is_mountpoint 1
+```
+
+The resulting configuration was verified in:
+
+```text
+/etc/pve/storage.cfg
+```
+
+Both storage definitions contained:
+
+```text
+is_mountpoint 1
+```
+
+The final logic is therefore:
+
+```text
+HDD mounted correctly
+        ↓
+mount point exists and is valid
+        ↓
+Proxmox storage becomes available
+
+HDD not mounted
+        ↓
+directory still exists
+        ↓
+is_mountpoint check fails
+        ↓
+Proxmox does not use the directory as normal storage
+```
+
+This adds an important safety layer and reduces the risk of accidentally writing VM data or backups to the Proxmox system disk when one of the HDDs is unavailable.
+
+---
+
+# 8. Why the Backup Disk Is Separate
 
 The 500 GB HDD was assigned specifically to backup storage instead of using the same filesystem as the main data disk.
 
@@ -478,7 +571,7 @@ For this reason, `pve-backup` should be considered the first local backup layer 
 
 ---
 
-# 8. Final Storage Layout
+# 9. Final Storage Layout
 
 At the end of the configuration, the server storage layout is:
 
@@ -492,7 +585,7 @@ The two additional filesystems use persistent UUID-based mounts through `/etc/fs
 
 ---
 
-# 9. Verification
+# 10. Verification
 
 The important checks performed during the configuration included:
 
@@ -520,7 +613,7 @@ No significant problems were encountered during the storage configuration.
 
 ---
 
-# 10. Lessons Learned
+# 11. Lessons Learned
 
 ## A disk is not immediately usable storage
 
@@ -596,7 +689,7 @@ help verify that the configuration behaves as expected before the system is rebo
 
 ---
 
-# 11. Current Status
+# 12. Current Status
 
 The storage preparation phase is now complete.
 
