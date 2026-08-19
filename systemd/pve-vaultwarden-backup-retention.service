@@ -1,0 +1,9 @@
+[Unit]
+Description=Remove old Vaultwarden backups
+RequiresMountsFor=/mnt/pve-backup
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/vaultwarden-backup-retention.sh
+User=root
+Group=root
