@@ -1,0 +1,52 @@
+services:
+  db:
+    image: mariadb:11.8 #required version for the time. 
+    restart: unless-stopped
+    command: --transaction-isolation=READ-COMMITTED
+    volumes:
+      - ./db:/var/lib/mysql
+    env_file:
+      - db.env
+    environment:
+      MARIADB_AUTO_UPGRADE: "1"
+      MARIADB_DISABLE_UPGRADE_BACKUP: "1"
+
+  redis:
+    image: redis:alpine
+    restart: unless-stopped
+
+  app:
+    build: .
+    image: nextcloud-homelab:34.0.2-apache #stable release
+    restart: unless-stopped
+    ports:
+      - "${DOCKER_HOST_IP}:${NEXTCLOUD_PORT}:80"
+    extra_hosts:
+      - "nextcloud.home.arpa:${DOCKER_HOST_IP}"
+    volumes:
+      - ./app:/var/www/html
+      - /srv/data/nextcloud/data:/var/www/html/data
+    environment:
+      MYSQL_HOST: db
+      REDIS_HOST: redis
+      NEXTCLOUD_TRUSTED_DOMAINS: nextcloud.home.arpa
+      OVERWRITEPROTOCOL: "https"
+      OVERWRITECLIURL: "https://nextcloud.home.arpa"
+    env_file:
+      - db.env
+    depends_on:
+      - db
+      - redis
+
+  cron:
+    image: nextcloud-homelab:34.0.2-apache #stable release
+    restart: unless-stopped
+    entrypoint: /cron.sh
+    extra_hosts:
+      - "${DOCKER_HOST_IP}:${NEXTCLOUD_PORT}:80"
+    volumes:
+      - ./app:/var/www/html
+      - /srv/data/nextcloud/data:/var/www/html/data
+    depends_on:
+      - db
+      - redis
