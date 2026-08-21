@@ -1,0 +1,15 @@
+services:
+  vaultwarden:
+    image: vaultwarden/server:1.37.0
+    container_name: vaultwarden
+    restart: unless-stopped
+
+    environment:
+      DOMAIN: "${VAULTWARDEN_DOMAIN}"
+      SIGNUPS_ALLOWED: "false"
+
+    volumes:
+      - ./data:/data
+
+    ports:
+      - "${DOCKER_HOST_IP}:${VAULTWARDEN_PORT}:80"
