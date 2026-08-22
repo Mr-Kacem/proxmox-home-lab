@@ -1,0 +1,13 @@
+services:
+  app:
+    image: jc21/nginx-proxy-manager:2.15.1
+    restart: unless-stopped
+
+    ports:
+      - "${NPM_HOST_IP}:${NPM_HTTP_PORT}:80"
+      - "${NPM_HOST_IP}:${NPM_HTTPS_PORT}:443"
+      - "${NPM_HOST_IP}:${NPM_ADMIN_PORT}:81"
+
+    volumes:
+      - ./data:/data
+      - ./letsencrypt:/etc/letsencrypt
