@@ -1,0 +1,14 @@
+services:
+  adguard-home:
+    image: adguard/adguardhome:latest
+    restart: unless-stopped
+
+    volumes:
+      - ./work:/opt/adguardhome/work
+      - ./conf:/opt/adguardhome/conf
+
+    ports:
+      - "${ADGUARD_HOST_IP}:53:53/tcp"
+      - "${ADGUARD_HOST_IP}:53:53/udp"
+      - "${ADGUARD_HOST_IP}:${ADGUARD_SETUP_PORT}:3000/tcp"
+      - "${ADGUARD_HOST_IP}:${ADGUARD_WEB_PORT}:80/tcp"
