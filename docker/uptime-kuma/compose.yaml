@@ -1,0 +1,10 @@
+services:
+  uptime-kuma:
+    image: louislam/uptime-kuma:2
+    restart: unless-stopped
+
+    volumes:
+      - ./data:/app/data
+
+    ports:
+      - "${UPTIME_KUMA_HOST_IP}:${UPTIME_KUMA_PORT}:3001"
