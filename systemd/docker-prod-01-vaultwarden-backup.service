@@ -6,6 +6,6 @@ Requires=docker.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/sbin/vaultwarden-backup.sh
+ExecStart=/usr/bin/flock -w 3600 /run/homelab-backup.lock /usr/local/sbin/vaultwarden-backup.sh
 User=root
 Group=root
