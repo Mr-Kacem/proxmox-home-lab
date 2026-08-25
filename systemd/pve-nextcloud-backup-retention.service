@@ -1,0 +1,9 @@
+[Unit]
+Description=Remove old Nextcloud backups
+RequiresMountsFor=/mnt/pve-backup
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/nextcloud-backup-retention.sh
+User=root
+Group=root
