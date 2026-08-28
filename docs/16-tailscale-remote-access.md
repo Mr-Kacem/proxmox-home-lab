@@ -169,3 +169,5 @@ Nextcloud
 ```
 
 Both services are now accessible from the Android device inside or outside the home network without buying a public domain or exposing the services directly to the Internet.
+
+After rebooting and confirming that both services were working correctly through Tailscale, a Proxmox snapshot was created to preserve the validated state.
