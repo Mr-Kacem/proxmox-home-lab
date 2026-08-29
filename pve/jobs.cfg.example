@@ -1,0 +1,12 @@
+vzdump: YOUR_BACKUP_JOB_ID
+        schedule sat 15:00
+        compress zstd
+        enabled 1
+        fleecing 0
+        mode snapshot
+        notes-template Weekly full VM backup | {{guestname}} | VM {{vmid}}
+        notification-mode notification-system
+        prune-backups keep-last=4
+        repeat-missed 1
+        storage pve-backup
+        vmid YOUR_VMID
