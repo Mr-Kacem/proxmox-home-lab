@@ -171,3 +171,11 @@ Nextcloud
 Both services are now accessible from the Android device inside or outside the home network without buying a public domain or exposing the services directly to the Internet.
 
 After rebooting and confirming that both services were working correctly through Tailscale, a Proxmox snapshot was created to preserve the validated state.
+
+## Additional Mobile Client Validation
+
+A second mobile device (iPhone) was added to the Tailnet and used to verify the remote-access setup.
+
+Bitwarden was configured on the iPhone using the existing Tailscale HTTPS endpoint, and access was successfully tested with a separate Vaultwarden account.
+
+This confirmed that the setup works across multiple mobile devices and independent user accounts without exposing Vaultwarden directly to the Internet.
