@@ -1,4 +1,4 @@
-FROM nextcloud:34.0.2-apache
+FROM nextcloud:34.0.3-apache
 
 COPY homelab-ca.crt /usr/local/share/ca-certificates/homelab-ca.crt
 

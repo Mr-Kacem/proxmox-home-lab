@@ -1,6 +1,6 @@
 services:
   db:
-    image: mariadb:11.8 #required version for the time. 
+    image: mariadb:11.8
     restart: unless-stopped
     command: --transaction-isolation=READ-COMMITTED
     volumes:
@@ -17,7 +17,7 @@ services:
 
   app:
     build: .
-    image: nextcloud-homelab:34.0.2-apache #stable release
+    image: nextcloud-homelab:34.0.3-apache
     restart: unless-stopped
     ports:
       - "${DOCKER_HOST_IP}:${NEXTCLOUD_PORT}:80"
@@ -40,7 +40,7 @@ services:
       - redis
 
   cron:
-    image: nextcloud-homelab:34.0.2-apache #stable release
+    image: nextcloud-homelab:34.0.3-apache
     restart: unless-stopped
     entrypoint: /cron.sh
     extra_hosts:
