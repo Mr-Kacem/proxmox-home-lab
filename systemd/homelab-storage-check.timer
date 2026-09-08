@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily Home Lab storage health check
+
+[Timer]
+OnCalendar=*-*-* 18:00:00
+Persistent=true
+Unit=homelab-storage-check.service
+
+[Install]
+WantedBy=timers.target

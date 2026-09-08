@@ -1,0 +1,10 @@
+[Unit]
+Description=Home Lab disk health and storage usage check
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/homelab-storage-check.sh
+User=root
+Group=root
