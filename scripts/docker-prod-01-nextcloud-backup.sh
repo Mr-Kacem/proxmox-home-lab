@@ -22,6 +22,23 @@ LOCAL_DB_DUMP="/tmp/nextcloud-${TIMESTAMP}-db.sql"
 MAINTENANCE_ON=0
 CRON_STOPPED=0
 
+echo "Waiting for Nextcloud to become ready..."
+
+for i in {1..30}; do
+    if docker compose -f "$APP_DIR/compose.yaml" exec -T -u www-data app \
+        php occ status >/dev/null 2>&1; then
+        echo "Nextcloud is ready."
+        break
+    fi
+
+    if [[ "$i" -eq 30 ]]; then
+        echo "ERROR: Nextcloud did not become ready in time." >&2
+        exit 1
+    fi
+
+    sleep 10
+done
+
 restore_service_state() {
     if [[ "$MAINTENANCE_ON" -eq 1 ]]; then
         docker compose -f "$APP_DIR/compose.yaml" exec -T -u www-data app \
