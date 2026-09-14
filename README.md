@@ -1,13 +1,13 @@
 # Proxmox Home Lab
 
-A hands-on Linux, virtualization, networking, and self hosting home lab built on repurposed hardware.
+A hands-on Linux, virtualization, networking, and self-hosting home lab built on repurposed hardware.
 
-This project documents my transition from guided Linux labs to designing, operating, maintaining, and recovering a real **Proxmox VE** environment.
+This project documents my transition from guided Linux labs to designing, operating, maintaining, troubleshooting, and recovering a real **Proxmox VE** environment.
 
 The focus is not simply on deploying services, but on understanding the Linux, networking, storage, virtualization, monitoring, security, backup, and recovery concepts behind them.
 
 > **Status:** 🚧 Active development  
-> **Current stage:** Proxmox infrastructure, LFCS multi server lab, Docker services, local and remote HTTPS access, monitoring, automated backups, recovery testing, and maintenance procedures operational.
+> **Current stage:** Proxmox infrastructure, LFCS multi-server lab, Docker services, local and remote access, monitoring, automated backups, recovery testing, host health checks, and maintenance procedures operational.
 
 ---
 
@@ -22,8 +22,8 @@ The focus is not simply on deploying services, but on understanding the Linux, n
 - Implement monitoring and service alerts
 - Build and test backup and recovery procedures
 - Automate repeatable administration tasks
-- Practice controlled system and container maintenance
-- Document technical decisions and troubleshooting with Git
+- Practice controlled troubleshooting and maintenance
+- Document technical decisions and validation with Git
 
 ---
 
@@ -49,14 +49,14 @@ The hardware is intentionally modest and was repurposed from an older desktop sy
 ```text
                             Home Network
                                  │
-                                                          ▼
+                                 ▼
                           ┌─────────────┐
                           │ Proxmox VE  │
                           └──────┬──────┘
                                  │
                    ┌─────────────┴─────────────┐
                    │                           │
-                                 ▼                                               ▼
+                   ▼                           ▼
              LFCS Lab VMs               docker-prod-01
                    │                           │
          ┌─────────┼─────────┐      ┌──────────┼───────────────┐
@@ -66,10 +66,10 @@ The hardware is intentionally modest and was repurposed from an older desktop sy
             lfcs-ubuntu-02                 Nginx Proxy Manager
                                            Vaultwarden
                                                 │
-                                                                                    ▼
+                                                ▼
                                              Tailscale
                                                 │
-                                                                                    ▼
+                                                ▼
                                           Mobile Clients
 ```
 
@@ -85,7 +85,7 @@ Storage is separated by purpose:
 
 ## LFCS Lab
 
-A three-machine Ubuntu Server environment is available for Linux administration exercises:
+A three machine Ubuntu Server environment is available for Linux administration exercises:
 
 ```text
 lfcs-ubuntu-01
@@ -118,17 +118,17 @@ A dedicated Ubuntu Server VM named `docker-prod-01` hosts the main container wor
 | Uptime Kuma | Infrastructure and service monitoring |
 | AdGuard Home | DNS filtering |
 | Nginx Proxy Manager | Reverse proxy and local HTTPS |
-| Vaultwarden | Self hosted password manager |
+| Vaultwarden | Self-hosted password manager |
 | Nextcloud | Private cloud and file storage |
 
 Reusable and sanitized Docker configurations are stored under:
 
 ```text
 docker/
-├── adguard home/
+├── adguard-home/
 ├── nextcloud/
-├── nginx proxy manager/
-├── uptime kuma/
+├── nginx-proxy-manager/
+├── uptime-kuma/
 └── vaultwarden/
 ```
 
@@ -136,7 +136,9 @@ The repository contains deployment configuration and safe example environment fi
 
 ---
 
-## Local HTTPS
+## Networking and Access
+
+### Local HTTPS
 
 Internal services can be accessed through readable `home.arpa` hostnames.
 
@@ -146,7 +148,7 @@ Nginx Proxy Manager handles reverse proxying and HTTPS using a private homelab C
 Browser
    │
    │ HTTPS
-     ▼
+   ▼
 Nginx Proxy Manager
    │
    ├── Uptime Kuma
@@ -157,38 +159,37 @@ Nginx Proxy Manager
 
 Private CA keys and sensitive certificate material are not stored in the repository.
 
----
+### Remote Access with Tailscale
 
-## Remote Access with Tailscale
+Tailscale provides WireGuard-based private connectivity to selected services without exposing them directly to the public Internet.
 
-Tailscale provides WireGuard based private connectivity to selected services without exposing them directly to the public Internet.
-
-Vaultwarden and Nextcloud are available to authorized mobile clients through **Tailscale Serve** and publicly trusted HTTPS certificates.
+Vaultwarden and Nextcloud are available to authorized mobile clients through Tailscale Serve and publicly trusted HTTPS certificates.
 
 ```text
 Mobile Client
      │
-        ▼
+     ▼
   Tailscale
      │
-        ▼
+     ▼
 Tailscale Serve
      │
      ├── Vaultwarden
      └── Nextcloud
 ```
 
-The existing LAN access through Nginx Proxy Manager remains available independently.
+Remote access has been validated over WiFi and mobile data on multiple mobile devices.
 
-Remote access has been tested over:
+### Selective DNS on Workstation
 
-- home Wi-Fi
-- mobile data
-- Android
-- iPhone
-- multiple Vaultwarden accounts
+The workstation `pluto` uses different DNS policies depending on the active WiFi profile:
 
-No public port forwarding is required.
+```text
+Slow (2.4 GHz) → AdGuard Home
+Fast (5 GHz)   → FRITZ!Box DNS
+```
+
+NetworkManager handles the DNS switch automatically while IPv6 connectivity remains enabled.
 
 ---
 
@@ -201,25 +202,17 @@ Uptime Kuma monitors the availability of the main homelab services, including:
 - Nginx Proxy Manager
 - AdGuard Home
 
-Push notifications are delivered to a mobile device through **ntfy**.
+Push notifications are delivered through **ntfy**.
 
-A real outage and recovery test was performed by intentionally stopping Nextcloud:
+A real outage and recovery test was performed by intentionally stopping Nextcloud and verifying both `DOWN` and `UP` notifications.
 
-```text
-Nextcloud stopped
-       ↓
-Uptime Kuma detects DOWN
-       ↓
-ntfy notification received
-       ↓
-Nextcloud restarted
-       ↓
-Uptime Kuma detects UP
-       ↓
-recovery notification received
-```
+The Proxmox host also performs a daily storage health check that verifies:
 
-This confirms that the monitoring chain detects both service outages and successful recoveries.
+- filesystem usage
+- SMART health
+- disk failure conditions
+
+Detected problems can trigger ntfy alerts automatically.
 
 ---
 
@@ -229,7 +222,7 @@ The 500 GB HDD is dedicated to local backup storage through `pve-backup`.
 
 The project uses multiple recovery layers.
 
-### Application-Level Backups
+### Application Level Backups
 
 Vaultwarden and Nextcloud have dedicated backup procedures including:
 
@@ -241,18 +234,13 @@ Vaultwarden and Nextcloud have dedicated backup procedures including:
 
 Vaultwarden and Nextcloud backup jobs use a shared `flock` lock to prevent overlapping backup operations.
 
-Automation files are stored under:
-
-```text
-scripts/
-systemd/
-```
+The Nextcloud backup automation was also improved to wait for the application stack to become ready after boot before starting the backup.
 
 ### Full VM Backup
 
-The complete `docker-prod-01` VM is also backed up through Proxmox.
+The complete `docker-prod-01` VM is backed up through Proxmox.
 
-A real restore was performed from a Proxmox VM backup and the restored environment was verified with:
+A real restore was performed and the restored environment was verified with:
 
 - Docker
 - Tailscale
@@ -266,37 +254,31 @@ A recurring Proxmox backup job provides:
 - retention
 - missed-job handling
 
-The backup procedure is therefore not only configured but proven through an actual recovery test.
+The recovery process has therefore been tested, not only configured.
 
-The internal backup HDD remains a local recovery layer and is not considered a complete off site backup strategy.
+The internal backup HDD remains a local recovery layer and is not considered a complete off-site backup solution.
 
 ---
 
-## Automatic Security Updates
+## Host Reliability and Maintenance
+
+### Automatic Security Updates
 
 Ubuntu security maintenance on `docker-prod-01` uses the native `unattended-upgrades` mechanism.
 
-The existing APT timers and configuration were inspected and verified.
+Supported security updates are installed automatically while broader package updates remain under manual control.
 
-The current policy automatically handles supported Ubuntu security updates while broader package updates remain under manual control.
-
-Automatic rebooting is explicitly disabled:
+Automatic rebooting is disabled:
 
 ```text
-Unattended Upgrade::Automatic Reboot "false";
+Unattended-Upgrade::Automatic-Reboot "false";
 ```
 
-This prevents an unattended update from unexpectedly restarting the Docker host and interrupting its services.
+This prevents unexpected service interruptions.
 
-Example APT configuration is stored separately in the repository.
+### Controlled Container Maintenance
 
----
-
-## Controlled Service Maintenance
-
-Container updates are performed deliberately instead of automatically updating every service.
-
-The general maintenance workflow is:
+Container updates are performed deliberately:
 
 ```text
 check current version
@@ -312,15 +294,53 @@ verify application state
 test service functionality
 ```
 
-This procedure has been used for:
+This process has been used for Nextcloud, Vaultwarden, and Uptime Kuma.
 
-- Nextcloud
-- Vaultwarden
-- Uptime Kuma
+### Wake-on-LAN
 
-Nginx Proxy Manager and AdGuard Home were also checked during maintenance and left unchanged when no update was required.
+Wake-on-LAN was configured and tested on the Proxmox host.
 
-This approach avoids unnecessary changes while keeping recovery options available before maintenance.
+The NIC supports Magic Packet wake-up, BIOS support was enabled, and Linux persistence was configured through `/etc/network/interfaces`.
+
+The server can now be powered on remotely through the FRITZ!Box.
+
+### Journal Persistence
+
+`systemd-journald` was reviewed on the Proxmox host.
+
+Persistent logs across previous boots were verified, disk usage was small, and no additional journal limits or configuration changes were required.
+
+---
+
+## Troubleshooting Exercises
+
+The project also includes controlled troubleshooting exercises.
+
+### Vaultwarden
+
+A Vaultwarden container was intentionally stopped to reproduce a service failure.
+
+The issue was diagnosed by separating:
+
+```text
+502 Bad Gateway
+→ reverse proxy reachable
+→ backend unavailable
+
+ECONNREFUSED
+→ host reachable
+→ no service listening on target port
+```
+
+Container state and backend response were then verified directly.
+
+### Nextcloud Backup
+
+A failed automatic Nextcloud backup was traced through `journalctl` and container logs.
+
+The real cause was a startup timing problem: Docker was running, but MariaDB and Nextcloud were not yet ready.
+
+The backup script was corrected to wait for application readiness before proceeding.
 
 ---
 
@@ -329,19 +349,15 @@ This approach avoids unnecessary changes while keeping recovery options availabl
 ```text
 .
 ├── docker/            # Reusable Docker deployment configurations
-├── docker-prod-01/    # Host level configuration examples for the Docker VM
+├── docker-prod-01/    # Host-level configuration examples for the Docker VM
 ├── docs/              # Project documentation
 ├── pve/               # Sanitized Proxmox configuration examples
-├── scripts/           # Backup and retention scripts
+├── scripts/           # Backup, retention, and monitoring scripts
 ├── systemd/           # systemd services and timers
 └── README.md
 ```
 
 ### Docker Host Configuration
-
-Host-level Ubuntu configuration that does not belong to an individual container is kept separately.
-
-Example:
 
 ```text
 docker-prod-01/
@@ -352,8 +368,6 @@ docker-prod-01/
 
 ### Proxmox Configuration Examples
 
-The `pve/` directory contains sanitized examples of relevant Proxmox and Linux host configuration:
-
 ```text
 pve/
 ├── fstab.example
@@ -362,7 +376,7 @@ pve/
 └── storage.cfg.example
 ```
 
-These files demonstrate the actual configuration approach without unnecessarily publishing installation specific identifiers.
+These files demonstrate the actual configuration approach without publishing sensitive or installation-specific values unnecessarily.
 
 ---
 
@@ -393,7 +407,13 @@ docs/
 ├── 19-monitoring-alerts.md
 ├── 20-nextcloud-update.md
 ├── 21-vaultwarden-update.md
-└── 22-docker-service-maintenance.md
+├── 22-docker-service-maintenance.md
+├── 23-selective-dns-networkmanager.md
+├── 24-storage-health-monitoring.md
+├── 25-vaultwarden-troubleshooting.md
+├── 26-nextcloud-backup-startup-troubleshooting.md
+├── 27-wake-on-lan.md
+└── 28-proxmox-journal-persistence-check.md
 ```
 
 The documentation records planning, implementation, validation, troubleshooting, recovery, and maintenance instead of reconstructing the project after completion.
@@ -411,11 +431,12 @@ This project currently includes hands-on work with:
 - Linux bridges
 - block devices and filesystems
 - UUIDs and `/etc/fstab`
-- persistent mounts
+- SMART monitoring
 - SSH
 - Docker
 - Docker Compose
 - DNS
+- NetworkManager
 - reverse proxies
 - HTTP/HTTPS
 - TLS certificates
@@ -430,8 +451,11 @@ This project currently includes hands-on work with:
 - Bash scripting
 - `flock`
 - systemd services and timers
+- `journalctl`
 - APT unattended security updates
+- Wake-on-LAN
 - controlled container maintenance
+- structured troubleshooting
 - Git and technical documentation
 
 ---
@@ -451,6 +475,7 @@ Public examples are used instead of publishing:
 - private CA keys
 - Tailscale authentication keys
 - private notification topics
+- Wi-Fi credentials
 
 Files such as `.env.example` and sanitized `.example` configurations document how services are configured without exposing credentials or sensitive runtime information.
 
@@ -461,8 +486,7 @@ Files such as `.env.example` and sanitized `.example` configurations document ho
 ### Completed
 
 - [x] Install and validate Proxmox VE
-- [x] Configure persistent data storage
-- [x] Configure dedicated backup storage
+- [x] Configure persistent data and backup storage
 - [x] Build a three-machine LFCS lab
 - [x] Configure stable VM networking
 - [x] Test Proxmox snapshots
@@ -477,11 +501,15 @@ Files such as `.env.example` and sanitized `.example` configurations document ho
 - [x] Automate Nextcloud backups
 - [x] Perform real application restore tests
 - [x] Configure secure Tailscale remote access
-- [x] Validate remote access from multiple mobile devices
+- [x] Configure selective DNS on a workstation
 - [x] Configure monitoring alerts with ntfy
+- [x] Configure automated Proxmox storage health checks
 - [x] Configure automatic Ubuntu security updates
 - [x] Configure scheduled full VM backups
 - [x] Perform a complete VM restore test
+- [x] Configure Wake-on-LAN
+- [x] Verify persistent Proxmox journal logging
+- [x] Practice controlled service troubleshooting
 - [x] Establish controlled container update procedures
 
 ### Future
@@ -492,7 +520,7 @@ Files such as `.env.example` and sanitized `.example` configurations document ho
 - [ ] Introduce Ansible
 - [ ] Explore isolated networks and VLANs
 - [ ] Study KVM and libvirt independently from Proxmox
-- [ ] Expand monitoring beyond basic availability checks
+- [ ] Expand monitoring beyond basic availability and disk health checks
 
 ---
 
@@ -513,6 +541,7 @@ monitoring
 backup
 recovery
 maintenance
+troubleshooting
 ```
 
 The objective is not simply to make services work.
