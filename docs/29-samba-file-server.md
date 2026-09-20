@@ -2,110 +2,94 @@
 
 ## 1. Overview
 
-A new Ubuntu Server VM named `fileserver-01` was prepared as a basic Samba file server.
+`fileserver-01` was finalized as a persistent Samba file server with LAN-only access, automatic client mounting, and a cleaned Samba configuration.
 
-The VM was configured with `qemu-guest-agent` and a reserved LAN address:
-
-```text
-192.168.178.49
-```
-
-A second 100 GB virtual disk on `pve-data` was added specifically for shared file storage, keeping the operating system and file-server data separated.
+Group-based access through the Linux `fileshare` group is documented separately in `30-samba-group-access.md`.
 
 ---
 
-## 2. Data Disk
+## 2. Network Hardening
 
-The new virtual disk was prepared with:
+UFW was enabled on `fileserver-01` with incoming traffic blocked by default.
 
-- GPT partition table;
-- one partition: `/dev/sdb1`;
-- `ext4` filesystem;
-- filesystem label: `samba-data`.
-
-It was mounted at:
+Only the local network `192.168.178.0/24` is allowed to reach:
 
 ```text
-/srv/samba-data
+22/tcp   → SSH
+445/tcp  → SMB
 ```
 
-and added to `/etc/fstab` by UUID so the mount persists across reboots.
+After enabling the firewall, both SSH and Samba access were verified from the Ubuntu client.
 
-The Samba share directory was created at:
+Active Samba sessions and service logs were also checked with:
 
-```text
-/srv/samba-data/shared
+```bash
+smbstatus
+journalctl -u smbd
 ```
 
-with Linux permissions set to `770`.
+No relevant service errors were found.
 
 ---
 
-## 3. Samba Configuration
+## 3. Persistent Client Mount
 
-Samba was installed and `smbd` was verified as active and listening on TCP port `445`.
+The Ubuntu client was changed from a manual `gio mount` connection to a persistent CIFS mount configured through `/etc/fstab`.
 
-The local Linux user `hamza` was added to Samba authentication with `smbpasswd`.
+The mount uses:
 
-A share named:
+- a separate `.smbcredentials` file protected with permissions `600`;
+- `_netdev`;
+- `nofail`;
+- `x-systemd.automount`.
+
+After rebooting the client, the share was mounted automatically on first access at:
 
 ```text
-[shared]
+/mnt/fileserver-shared
 ```
 
-was configured in `/etc/samba/smb.conf` with authenticated read/write access restricted to the intended user.
+The mounted directory was also added to Nautilus favorites for easier graphical access.
 
-The configuration was validated with:
+---
+
+## 4. Samba Cleanup
+
+The Samba configuration was simplified by disabling unused printing and guest-sharing functionality:
+
+```ini
+load printers = no
+usershare allow guests = no
+```
+
+The `[printers]` and `[print$]` shares were removed.
+
+The final configuration was validated with:
 
 ```bash
 testparm
+smbclient
 ```
 
-and applied by reloading `smbd`.
+Only the intended `[shared]` share and the normal Samba `IPC$` service remained available.
 
 ---
 
-## 4. Validation
+## 5. Final State
 
-The share was tested locally with `smbclient`, confirming:
+The final setup now provides:
 
-- authentication;
-- directory access;
-- file read/write operations.
+- authenticated group-based Samba access;
+- persistent data storage;
+- LAN-only SSH and SMB access;
+- automatic CIFS mounting on the Ubuntu client;
+- no guest access;
+- no unused printer shares.
 
-Access from an Ubuntu desktop client was also verified over the network.
-
-Nautilus initially did not complete the SMB connection correctly, while command-line access worked. The client side was isolated as the problem and the share was mounted manually with `gio mount`.
-
-After authentication, Nautilus recognized the share correctly.
-
-The final path is:
+A final Proxmox snapshot named:
 
 ```text
-Ubuntu client
-    ↓
-SMB
-    ↓
-Samba on fileserver-01
-    ↓
-/srv/samba-data/shared
-    ↓
-100 GB ext4 data disk
+samba-fileserver-final
 ```
 
----
-
-## 5. Final Status
-
-| Check | Status |
-|---|---|
-| `fileserver-01` VM | Operational |
-| Data disk | Mounted persistently |
-| Samba service | Active |
-| TCP 445 | Listening |
-| Samba authentication | Verified |
-| Read/write access | Verified |
-| `smbclient` access | Verified |
-| Nautilus access | Verified |
-
-`fileserver-01` is now operational as a basic authenticated Samba file server.
+was created after validation.
