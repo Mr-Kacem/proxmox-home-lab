@@ -2,64 +2,90 @@
 
 ## 1. Overview
 
-A complete Proxmox backup and recovery procedure was tested for `docker-prod-01`.
+The Proxmox backup strategy was validated with real restore tests for both main service VMs:
 
-Unlike the existing application-level backups, this backup protects the entire virtual machine.
+- `docker-prod-01`
+- `fileserver-01`
 
-The backup is stored on:
+The objective was to verify that backups stored on `pve-backup` are not only created successfully, but can actually restore complete working virtual machines.
+
+---
+
+## 2. docker-prod-01 Recovery Test
+
+A full Proxmox backup of `docker-prod-01` was restored and tested separately from the original VM.
+
+The restored system was verified with:
+
+- Docker;
+- Tailscale;
+- Vaultwarden;
+- Nextcloud.
+
+The test confirmed that the complete Docker service environment can be recovered from a Proxmox VM backup.
+
+---
+
+## 3. fileserver-01 Recovery Test
+
+A full manual backup of `fileserver-01` was created using:
 
 ```text
-pve-backup
+Mode:        snapshot
+Compression: zstd
+Storage:     pve-backup
 ```
 
----
+The backup archive was verified as present and recognized by Proxmox.
 
-## 2. Restore Test
+It was then restored as a temporary VM with the network disconnected to avoid IP or MAC conflicts with the original server.
 
-A manual VM backup was created and a real restore was performed.
+The restored VM was checked for:
 
-The original VM was powered off before testing the restored copy.
+- successful Ubuntu boot;
+- persistent Samba data-disk mount;
+- existing shared files;
+- active `smbd` service.
 
-The restore was also successfully tested without assigning a new `Unique` identity.
+All checks passed.
 
-After restoration, the following components were verified:
-
-* Docker;
-* Tailscale;
-* Bitwarden / Vaultwarden access;
-* Nextcloud.
-
-All services returned operational on the restored VM.
-
-This confirmed that the backup can be used to recover the complete `docker-prod-01` environment after VM loss.
+The temporary restored VM was deleted after validation, confirming that the original backup remained available and usable.
 
 ---
 
-## 3. Automated Backup
+## 4. Automated Backup Job
 
-A scheduled weekly Proxmox backup job was configured for the VM.
+The existing weekly Proxmox backup job was extended to include both service VMs:
 
-`Repeat missed` is enabled so a missed scheduled backup can run later when the Proxmox server becomes available again.
+```text
+docker-prod-01
+fileserver-01
+```
 
-This is useful because the homelab server is not required to remain powered on continuously.
+Current policy:
 
-Backup retention is also configured directly in the Proxmox backup job.
+```text
+Schedule:    Saturday 15:00
+Storage:     pve-backup
+Mode:        snapshot
+Compression: zstd
+Retention:   keep last 4 backups
+```
+
+Missed-job handling remains enabled so a scheduled backup can run later if the Proxmox host was powered off.
 
 ---
 
-## 4. Final Status
+## 5. Final Status
 
-| Check                    | Status     |
-| ------------------------ | ---------- |
-| Manual full VM backup    | Passed     |
-| Real VM restore          | Passed     |
-| Restore without `Unique` | Passed     |
-| Docker verification      | Passed     |
-| Tailscale verification   | Passed     |
-| Vaultwarden verification | Passed     |
-| Nextcloud verification   | Passed     |
-| Weekly automated backup  | Configured |
-| Missed-job handling      | Enabled    |
-| Backup retention         | Configured |
+| Check | Status |
+|---|---|
+| `docker-prod-01` restore | Verified |
+| `fileserver-01` backup | Verified |
+| `fileserver-01` restore | Verified |
+| Samba data after restore | Verified |
+| Temporary restore cleanup | Completed |
+| Weekly backup job | Updated |
+| Retention | 4 backups |
 
-The VM backup is therefore not only configured but has been proven recoverable through an actual restore test.
+The VM backup workflow is now validated for both main service VMs through real restore testing.
