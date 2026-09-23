@@ -9,4 +9,4 @@ vzdump: YOUR_BACKUP_JOB_ID
         prune-backups keep-last=4
         repeat-missed 1
         storage pve-backup
-        vmid YOUR_VMID
+        vmid YOUR_VMID, YOUR_VMID
