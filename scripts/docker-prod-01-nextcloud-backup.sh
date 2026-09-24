@@ -5,6 +5,7 @@ umask 077
 
 APP_DIR="/opt/docker/nextcloud"
 DATA_PARENT="/srv/data/nextcloud"
+TMP_DIR="/srv/data/nextcloud-backup-tmp"
 
 REMOTE_USER="vaultbackup"
 REMOTE_HOST="192.168.178.35"
@@ -17,7 +18,7 @@ TIMESTAMP="$(date '+%Y-%m-%d_%H-%M-%S')"
 REMOTE_DIR="${REMOTE_BASE}/${TIMESTAMP}"
 
 DB_DUMP_CONTAINER="/tmp/nextcloud-db.sql"
-LOCAL_DB_DUMP="/tmp/nextcloud-${TIMESTAMP}-db.sql"
+LOCAL_DB_DUMP="${TMP_DIR}/nextcloud-${TIMESTAMP}-db.sql"
 
 MAINTENANCE_ON=0
 CRON_STOPPED=0
@@ -50,7 +51,12 @@ restore_service_state() {
     fi
 }
 
-trap restore_service_state EXIT
+cleanup() {
+    restore_service_state
+    rm -f "${TMP_DIR}"/nextcloud-"${TIMESTAMP}"-*
+}
+
+trap cleanup EXIT
 
 echo "Checking backup destination..."
 ssh \
@@ -84,20 +90,20 @@ if [[ ! -s "$LOCAL_DB_DUMP" ]]; then
 fi
 
 echo "Creating app archive..."
-tar -czpf "/tmp/nextcloud-${TIMESTAMP}-app.tar.gz" \
+tar -czpf "${TMP_DIR}/nextcloud-${TIMESTAMP}-app.tar.gz" \
   -C "$APP_DIR" app
 
 echo "Creating data archive..."
-tar -czpf "/tmp/nextcloud-${TIMESTAMP}-data.tar.gz" \
+tar -czpf "${TMP_DIR}/nextcloud-${TIMESTAMP}-data.tar.gz" \
   -C "$DATA_PARENT" data
 
 echo "Creating stack archive..."
-tar -czpf "/tmp/nextcloud-${TIMESTAMP}-stack.tar.gz" \
+tar -czpf "${TMP_DIR}/nextcloud-${TIMESTAMP}-stack.tar.gz" \
   -C "$APP_DIR" \
   compose.yaml db.env Dockerfile homelab-ca.crt
 
 echo "Calculating checksums..."
-cd /tmp
+cd "$TMP_DIR"
 
 sha256sum \
   "nextcloud-${TIMESTAMP}-app.tar.gz" \
@@ -111,7 +117,7 @@ scp \
   -i "$SSH_KEY" \
   -o UserKnownHostsFile="$KNOWN_HOSTS" \
   -o StrictHostKeyChecking=yes \
-  /tmp/nextcloud-"${TIMESTAMP}"-* \
+  "${TMP_DIR}"/nextcloud-"${TIMESTAMP}"-* \
   "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_DIR}/"
 
 echo "Verifying remote checksums..."
@@ -137,10 +143,10 @@ CRON_STOPPED=0
 
 echo "Removing local temporary backup files..."
 rm -f \
-  "/tmp/nextcloud-${TIMESTAMP}-app.tar.gz" \
-  "/tmp/nextcloud-${TIMESTAMP}-data.tar.gz" \
-  "/tmp/nextcloud-${TIMESTAMP}-db.sql" \
-  "/tmp/nextcloud-${TIMESTAMP}-stack.tar.gz" \
-  "/tmp/nextcloud-${TIMESTAMP}-SHA256SUMS"
+  "${TMP_DIR}/nextcloud-${TIMESTAMP}-app.tar.gz" \
+  "${TMP_DIR}/nextcloud-${TIMESTAMP}-data.tar.gz" \
+  "${TMP_DIR}/nextcloud-${TIMESTAMP}-db.sql" \
+  "${TMP_DIR}/nextcloud-${TIMESTAMP}-stack.tar.gz" \
+  "${TMP_DIR}/nextcloud-${TIMESTAMP}-SHA256SUMS"
 
 echo "Nextcloud backup completed successfully: $TIMESTAMP"
