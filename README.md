@@ -1,28 +1,29 @@
 # Proxmox Home Lab
 
-A hands-on Linux, virtualization, networking, and self-hosting home lab built on repurposed hardware.
+A hands-on Linux, virtualization, networking, storage, and self-hosting home lab built on repurposed hardware.
 
-This project documents my transition from guided Linux labs to designing, operating, maintaining, troubleshooting, and recovering a real **Proxmox VE** environment.
+This project documents my progression from guided Linux labs to designing, operating, maintaining, troubleshooting, and recovering a real **Proxmox VE** environment.
 
 The focus is not simply on deploying services, but on understanding the Linux, networking, storage, virtualization, monitoring, security, backup, and recovery concepts behind them.
 
 > **Status:** 🚧 Active development  
-> **Current stage:** Proxmox infrastructure, LFCS multi-server lab, Docker services, local and remote access, monitoring, automated backups, recovery testing, host health checks, and maintenance procedures operational.
+> **Current stage:** Proxmox infrastructure, LFCS multi-server lab, Docker services, Samba/NFS file services, monitoring, automated backups, restore testing, remote access, and host maintenance operational.
 
 ---
 
 ## Project Goals
 
 - Build practical Linux system administration experience
-- Prepare for the LFCS certification
+- Reinforce LFCS-level administration skills through hands-on labs
 - Understand virtualization with Proxmox and KVM
 - Practice Linux storage and networking
-- Build isolated multi server lab environments
+- Build multi-server environments with clear service roles
 - Deploy and manage containerized services
+- Configure Linux file sharing with Samba and NFS
 - Implement monitoring and service alerts
 - Build and test backup and recovery procedures
 - Automate repeatable administration tasks
-- Practice controlled troubleshooting and maintenance
+- Practice structured troubleshooting and controlled maintenance
 - Document technical decisions and validation with Git
 
 ---
@@ -47,30 +48,33 @@ The hardware is intentionally modest and was repurposed from an older desktop sy
 ## Current Architecture
 
 ```text
-                            Home Network
-                                 │
-                                 ▼
-                          ┌─────────────┐
-                          │ Proxmox VE  │
-                          └──────┬──────┘
-                                 │
-                   ┌─────────────┴─────────────┐
-                   │                           │
-                   ▼                           ▼
-             LFCS Lab VMs               docker-prod-01
-                   │                           │
-         ┌─────────┼─────────┐      ┌──────────┼───────────────┐
-         │         │         │      │          │               │
- lfcs-ubuntu-01    │   lfcs-client-01      Uptime Kuma     Nextcloud
-                   │                       AdGuard Home
-            lfcs-ubuntu-02                 Nginx Proxy Manager
-                                           Vaultwarden
-                                                │
-                                                ▼
-                                             Tailscale
-                                                │
-                                                ▼
-                                          Mobile Clients
+                               Home Network
+                                    │
+                                    ▼
+                             ┌─────────────┐
+                             │ Proxmox VE  │
+                             └──────┬──────┘
+                                    │
+               ┌────────────────────┼────────────────────┐
+               │                    │                    │
+               ▼                    ▼                    ▼
+         LFCS Lab VMs         docker-prod-01        fileserver-01
+               │                    │                    │
+     ┌─────────┼─────────┐          │              ┌─────┴─────┐
+     │         │         │          │              │           │
+ubuntu-01  ubuntu-02   client    Docker stack    Samba       NFSv4.2
+                                  │                │           │
+                                  ├─ Uptime Kuma   │           └─ autofs client
+                                  ├─ AdGuard Home  │
+                                  ├─ Nginx Proxy   └─ CIFS client mount
+                                  ├─ Vaultwarden
+                                  └─ Nextcloud
+                                        │
+                                        ▼
+                                     Tailscale
+                                        │
+                                        ▼
+                                  Mobile Clients
 ```
 
 Storage is separated by purpose:
@@ -81,11 +85,13 @@ Storage is separated by purpose:
 500 GB HDD  → local backup storage
 ```
 
+`fileserver-01` also uses a dedicated 100 GB virtual data disk stored on `pve-data`.
+
 ---
 
 ## LFCS Lab
 
-A three machine Ubuntu Server environment is available for Linux administration exercises:
+A three-machine Ubuntu Server environment is available for Linux administration exercises:
 
 ```text
 lfcs-ubuntu-01
@@ -136,6 +142,37 @@ The repository contains deployment configuration and safe example environment fi
 
 ---
 
+## File Services
+
+A dedicated Ubuntu Server VM named `fileserver-01` provides local-network file sharing.
+
+### Samba
+
+The Samba share uses:
+
+- a dedicated 100 GB ext4 data disk;
+- Linux group-based access through `fileshare`;
+- setgid inheritance for shared files;
+- authenticated read/write access;
+- LAN-only firewall rules;
+- no guest access or printer shares.
+
+The Ubuntu desktop client uses a persistent CIFS mount with credentials stored outside the repository.
+
+### NFS
+
+The same server also provides an NFSv4.2 export from:
+
+```text
+/srv/samba-data/nfs-lab
+```
+
+The export is restricted to the local network and stored on the same dedicated data disk.
+
+`lfcs-client-01` accesses the export through `autofs`, allowing the NFS share to mount on demand and unmount after inactivity.
+
+---
+
 ## Networking and Access
 
 ### Local HTTPS
@@ -178,11 +215,11 @@ Tailscale Serve
      └── Nextcloud
 ```
 
-Remote access has been validated over WiFi and mobile data on multiple mobile devices.
+Remote access has been validated over Wi-Fi and mobile data on multiple mobile devices.
 
 ### Selective DNS on Workstation
 
-The workstation `pluto` uses different DNS policies depending on the active WiFi profile:
+The workstation `pluto` uses different DNS policies depending on the active Wi-Fi profile:
 
 ```text
 Slow (2.4 GHz) → AdGuard Home
@@ -222,7 +259,7 @@ The 500 GB HDD is dedicated to local backup storage through `pve-backup`.
 
 The project uses multiple recovery layers.
 
-### Application Level Backups
+### Application-Level Backups
 
 Vaultwarden and Nextcloud have dedicated backup procedures including:
 
@@ -234,25 +271,35 @@ Vaultwarden and Nextcloud have dedicated backup procedures including:
 
 Vaultwarden and Nextcloud backup jobs use a shared `flock` lock to prevent overlapping backup operations.
 
-The Nextcloud backup automation was also improved to wait for the application stack to become ready after boot before starting the backup.
+The Nextcloud backup workflow was improved further after troubleshooting two real failure modes:
 
-### Full VM Backup
+- the application stack was not yet ready after boot;
+- large temporary backup archives filled the root filesystem.
 
-The complete `docker-prod-01` VM is backed up through Proxmox.
+The script now waits for service readiness and writes temporary backup data to the dedicated data disk instead of `/tmp`.
 
-A real restore was performed and the restored environment was verified with:
+### Full VM Backups
 
-- Docker
-- Tailscale
-- Vaultwarden
-- Nextcloud
+The recurring Proxmox backup job covers:
 
-A recurring Proxmox backup job provides:
+```text
+docker-prod-01
+fileserver-01
+```
 
-- scheduled full VM backups
+The job uses:
+
+- snapshot mode
 - Zstandard compression
-- retention
-- missed-job handling
+- `pve-backup` storage
+- retention of the latest four backups
+- missed-job handling when the host is powered off
+
+Real restore tests were performed for both service VMs.
+
+For `docker-prod-01`, the restored environment was verified with Docker, Tailscale, Vaultwarden, and Nextcloud.
+
+For `fileserver-01`, the restored VM was verified for Ubuntu boot, persistent data-disk mounting, existing Samba files, and the active `smbd` service.
 
 The recovery process has therefore been tested, not only configured.
 
@@ -302,7 +349,7 @@ Wake-on-LAN was configured and tested on the Proxmox host.
 
 The NIC supports Magic Packet wake-up, BIOS support was enabled, and Linux persistence was configured through `/etc/network/interfaces`.
 
-The server can now be powered on remotely through the FRITZ!Box.
+The server can be powered on remotely through the FRITZ!Box.
 
 ### Journal Persistence
 
@@ -314,9 +361,9 @@ Persistent logs across previous boots were verified, disk usage was small, and n
 
 ## Troubleshooting Exercises
 
-The project also includes controlled troubleshooting exercises.
+The project includes controlled troubleshooting and real fault analysis.
 
-### Vaultwarden
+### Vaultwarden Backend Failure
 
 A Vaultwarden container was intentionally stopped to reproduce a service failure.
 
@@ -334,13 +381,25 @@ ECONNREFUSED
 
 Container state and backend response were then verified directly.
 
-### Nextcloud Backup
+### Nextcloud Backup Startup Failure
 
 A failed automatic Nextcloud backup was traced through `journalctl` and container logs.
 
-The real cause was a startup timing problem: Docker was running, but MariaDB and Nextcloud were not yet ready.
+The cause was a startup timing problem: Docker was running, but MariaDB and Nextcloud were not yet ready.
 
-The backup script was corrected to wait for application readiness before proceeding.
+The backup script was corrected to wait for application readiness.
+
+### Nextcloud Backup Storage Exhaustion
+
+A later maintenance-mode incident was traced to temporary backup files filling the VM root filesystem.
+
+The backup workflow was corrected by moving temporary archives to the dedicated data disk and strengthening cleanup behavior on failure.
+
+### NFS Storage Placement
+
+The initial NFS export directory was found to be on the VM system disk.
+
+`findmnt` was used to identify the mistake, and the export was moved to the dedicated 100 GB data disk before final validation.
 
 ---
 
@@ -349,22 +408,19 @@ The backup script was corrected to wait for application readiness before proceed
 ```text
 .
 ├── docker/            # Reusable Docker deployment configurations
-├── docker-prod-01/    # Host-level configuration examples for the Docker VM
 ├── docs/              # Project documentation
+├── fileserver-01/     # Sanitized Samba and NFS configuration examples
 ├── pve/               # Sanitized Proxmox configuration examples
 ├── scripts/           # Backup, retention, and monitoring scripts
 ├── systemd/           # systemd services and timers
 └── README.md
 ```
 
-### Docker Host Configuration
+### File Server Configuration
 
-```text
-docker-prod-01/
-└── apt/
-    ├── 20auto-upgrades.example
-    └── 50unattended-upgrades.example
-```
+The `fileserver-01/` directory contains sanitized configuration examples for the dedicated file server, including Samba and NFS configuration.
+
+Credentials and private Samba state are intentionally excluded.
 
 ### Proxmox Configuration Examples
 
@@ -413,7 +469,11 @@ docs/
 ├── 25-vaultwarden-troubleshooting.md
 ├── 26-nextcloud-backup-startup-troubleshooting.md
 ├── 27-wake-on-lan.md
-└── 28-proxmox-journal-persistence-check.md
+├── 28-proxmox-journal-persistence-check.md
+├── 29-samba-file-server.md
+├── 30-samba-group-access.md
+├── 31-nextcloud-backup-temp-storage-fix.md
+└── 32-nfs-file-sharing.md
 ```
 
 The documentation records planning, implementation, validation, troubleshooting, recovery, and maintenance instead of reconstructing the project after completion.
@@ -443,6 +503,11 @@ This project currently includes hands-on work with:
 - private Certificate Authorities
 - Tailscale
 - monitoring and alerting
+- Samba / SMB / CIFS
+- Linux group permissions and setgid
+- NFSv4.2
+- autofs
+- UFW
 - snapshots
 - application backups
 - full VM backups
@@ -476,6 +541,7 @@ Public examples are used instead of publishing:
 - Tailscale authentication keys
 - private notification topics
 - Wi-Fi credentials
+- Samba credential files
 
 Files such as `.env.example` and sanitized `.example` configurations document how services are configured without exposing credentials or sensitive runtime information.
 
@@ -506,15 +572,20 @@ Files such as `.env.example` and sanitized `.example` configurations document ho
 - [x] Configure automated Proxmox storage health checks
 - [x] Configure automatic Ubuntu security updates
 - [x] Configure scheduled full VM backups
-- [x] Perform a complete VM restore test
+- [x] Perform full VM restore tests
 - [x] Configure Wake-on-LAN
 - [x] Verify persistent Proxmox journal logging
+- [x] Deploy and harden a Samba file server
+- [x] Configure group-based Samba access
+- [x] Configure persistent CIFS client access
+- [x] Deploy NFSv4.2 on the file server
+- [x] Configure on-demand NFS mounting with autofs
 - [x] Practice controlled service troubleshooting
 - [x] Establish controlled container update procedures
 
 ### Future
 
-- [ ] Continue LFCS exercises
+- [ ] Continue Linux administration exercises
 - [ ] Expand backups beyond the physical server
 - [ ] Introduce centralized logging
 - [ ] Introduce Ansible
@@ -538,6 +609,7 @@ virtualization
 services
 security
 monitoring
+file sharing
 backup
 recovery
 maintenance
@@ -556,4 +628,4 @@ This repository records that progression.
 
 **Hamza Kacem**
 
-Currently focused on Linux system administration, LFCS preparation, networking, virtualization, and home lab infrastructure.
+Currently focused on Linux system administration, networking, virtualization, and home lab infrastructure.
